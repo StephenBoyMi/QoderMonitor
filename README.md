@@ -12,6 +12,16 @@
 
 第二张为 Qoder CN 状态栏中的实际显示效果，两行为示例会话数据。
 
+## 快速开始
+
+**系统要求**：Windows 10/11 x64、已安装 Qoder CN、Python 3（采集端只用标准库）；不需要管理员权限。
+
+1. 从 [Releases](https://github.com/StephenBoyMi/QoderMonitor/releases/latest) 下载最新的 zip，解压到任意目录。
+2. 双击 `安装到桌面.vbs`，它按当前目录创建桌面快捷方式。
+3. 双击桌面的「Qoder 悬浮监控」开关；绿卡表示已开启，灰卡表示已关闭。
+
+`bar_dcomp.exe` 未做代码签名，Windows SmartScreen 可能提示“未知发布者”，选择“更多信息 → 仍要运行”即可。
+
 ## 组成
 
 | 文件 | 说明 |
@@ -118,6 +128,10 @@ python qoder_monitor.py --check
 ```
 
 正常输出包含 `usage_mode`、`坏行 = 0` 与一行汇总；启动窄条后 `logs\bar_dcomp.log` 应出现 `dpi=...`、`surface ...x...`、`SHOW fg=Qoder CN.exe`。
+
+## 许可证
+
+本项目以 MIT 许可证发布，详见 [LICENSE](LICENSE)。
 
 ## 鸣谢
 
