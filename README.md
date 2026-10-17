@@ -118,3 +118,7 @@ python qoder_monitor.py --check
 ```
 
 正常输出包含 `usage_mode`、`坏行 = 0` 与一行汇总；启动窄条后 `logs\bar_dcomp.log` 应出现 `dpi=...`、`surface ...x...`、`SHOW fg=Qoder CN.exe`。
+
+## 鸣谢
+
+[TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor) 的作者 [zhongyang219](https://github.com/zhongyang219)：这个项目的轻量悬浮显示与 Windows 窗口处理思路给了本项目重要参考，特此致谢。本项目未直接复用其源码。
