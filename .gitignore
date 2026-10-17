@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+logs/
+bar_state.json
+bar_pid.json
+pos.json
+dcomp/*.exe
+*.tmp
