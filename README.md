@@ -1,12 +1,14 @@
 # QoderMonitor —— Qoder CN 会话监控
 
-只读 Qoder CN 写在本地磁盘的会话记录，算出模型用时、工具用时、轮步、tok/s、上下文、缓存命中与 credits，显示为一条置顶的透明窄条，也可作为 Qoder CN 的 statusLine。
+最初是在用 DeepSeek Harness（DSH）时，觉得它显示的输出速度、缓存命中等数据很有意思，能一眼看清模型这段时间的具体使用情况。Qoder CN 的界面上恰好有一块空白位置，于是照着这个思路做了这个小工具：把同样的会话指标放进一条不遮挡内容的透明窄条里。
+
+它只读 Qoder CN 写在本地磁盘的会话记录，算出模型用时、工具用时、轮步、tok/s、上下文、缓存命中与 credits，显示为一条置顶的透明窄条，也可作为 Qoder CN 的 statusLine。
 
 ![QoderMonitor 悬浮条示例](docs/preview.png)
 
 上图为示例数据；窄条背景本身完全透明，图中浅色底只是截图时临时铺的衬底。
 
-![嵌入 Qoder CN 状态栏](docs/qoder-cn.png)
+![嵌入 Qoder CN 状态栏](docs/qoder-cn-status.png)
 
 第二张为 Qoder CN 状态栏中的实际显示效果，两行为示例会话数据。
 
