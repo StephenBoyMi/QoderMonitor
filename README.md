@@ -16,7 +16,7 @@
 
 **系统要求**：Windows 10/11 x64、已安装 Qoder CN、Python 3（采集端只用标准库）；不需要管理员权限。
 
-1. 从 [Releases](https://github.com/StephenBoyMi/QoderMonitor/releases/latest) 下载最新的 zip，解压到任意目录。
+1. 从 [Releases](https://github.com/StephenBoyMi/QoderMonitor/releases/latest) 下载 `QoderMonitor-v*.zip` 附件（不是 GitHub 自动生成的 Source code），解压到任意目录。
 2. 双击 `安装到桌面.vbs`，它按当前目录创建桌面快捷方式。
 3. 双击桌面的「Qoder 悬浮监控」开关；绿卡表示已开启，灰卡表示已关闭，红卡表示切换失败并给出原因。
 
