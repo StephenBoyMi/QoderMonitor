@@ -2,6 +2,10 @@
 
 只读 Qoder CN 写在本地磁盘的会话记录，算出模型用时、工具用时、轮步、tok/s、上下文、缓存命中与 credits，显示为一条置顶的透明窄条，也可作为 Qoder CN 的 statusLine。
 
+![QoderMonitor 悬浮条示例](docs/preview.png)
+
+上图为示例数据；窄条背景本身完全透明，图中浅色底只是截图时临时铺的衬底。
+
 ## 组成
 
 | 文件 | 说明 |
