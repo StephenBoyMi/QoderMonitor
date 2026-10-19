@@ -1,6 +1,6 @@
 # C# 单 exe 原型
 
-状态：数据层与渲染端已合并，`single/QoderMonitor.exe` 可以独立运行。双击即显示悬浮条，进程内读取 transcript，不再启动 Python，也不读写 `bar_state.json`。这是 `single-exe` 分支的实验版本，仓库主线仍保留 Python + `bar_dcomp.exe` 的稳定版本。本机桌面快捷方式已切到单 exe；旧版的 `安装到桌面.vbs` 现在会优先安装单 exe。
+状态：数据层与渲染端已合并，`single/QoderMonitor.exe` 可以独立运行。双击即显示悬浮条，进程内读取 transcript，不再启动 Python，也不读写 `bar_state.json`。这是单 exe 实验版本，仓库里仍保留 Python + `bar_dcomp.exe` 的稳定版本。本机桌面快捷方式已切到单 exe；`安装到桌面.vbs` 会优先安装单 exe。
 
 ## 构建
 

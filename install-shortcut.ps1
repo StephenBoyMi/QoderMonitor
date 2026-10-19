@@ -16,6 +16,10 @@ param([switch]$Remove)
 $ErrorActionPreference = 'Stop'
 $Root    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Single  = Join-Path $Root 'QoderMonitor.exe'
+if (-not (Test-Path -LiteralPath $Single)) {
+    $alt = Join-Path (Join-Path $Root 'single') 'QoderMonitor.exe'
+    if (Test-Path -LiteralPath $alt) { $Single = $alt }
+}
 $Vbs     = Join-Path $Root 'toggle-monitor-hidden.vbs'
 $LnkName = 'Qoder 悬浮监控.lnk'
 $desktop = [Environment]::GetFolderPath('Desktop')
