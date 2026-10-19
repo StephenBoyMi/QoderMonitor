@@ -23,10 +23,12 @@ using QoderMonitor;
 
 static class App
 {
-    // ---------- 路径（全部相对 exe 自己） ----------
+    // ---------- 路径（exe 可在桌面，配置/日志放用户目录） ----------
     static readonly string Dir = Path.GetDirectoryName(Application.ExecutablePath);
-    static readonly string PosFile = Path.Combine(Dir, "pos.json");
-    static readonly string LogFile = Path.Combine(Dir, "logs", "QoderMonitor.log");
+    static readonly string ConfigDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "QoderMonitor");
+    static readonly string PosFile = Path.Combine(ConfigDir, "pos.json");
+    static readonly string LogFile = Path.Combine(ConfigDir, "logs", "QoderMonitor.log");
 
     // ---------- 主题 ----------
     static readonly Color C_FG = Hex("333a45"), C_TITLE = Hex("4b5462"), C_LBL = Hex("8b93a1");
@@ -175,6 +177,17 @@ static class App
     {
         try
         {
+            Directory.CreateDirectory(ConfigDir);
+            if (!File.Exists(PosFile))
+            {
+                // 从旧版“配置文件放在 exe 旁边”迁移一次，保留窄条位置。
+                string legacy = Path.Combine(Dir, "pos.json");
+                if (File.Exists(legacy)) File.Copy(legacy, PosFile, false);
+            }
+        }
+        catch { }
+        try
+        {
             var d = NewSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(PosFile));
             if (d.ContainsKey("pin")) pin = Convert.ToBoolean(d["pin"]);
             if (!always && d.ContainsKey("follow")) follow = Convert.ToBoolean(d["follow"]);
@@ -213,6 +226,7 @@ static class App
         winX = r.l; winY = r.t;
         try
         {
+            Directory.CreateDirectory(ConfigDir);
             Dictionary<string, object> d;
             try { d = NewSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(PosFile)); }
             catch { d = new Dictionary<string, object>(); }
@@ -893,6 +907,7 @@ static class App
     {
         try
         {
+            Directory.CreateDirectory(ConfigDir);
             Dictionary<string, object> d;
             try { d = NewSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(PosFile)); }
             catch { d = new Dictionary<string, object>(); }
