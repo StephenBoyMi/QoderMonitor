@@ -703,6 +703,14 @@ static class App
         return F0(d);
     }
 
+    // 标题最多 6 个字符：超出时前 5 字加省略号，避免窄条压到状态栏右侧控件。
+    static string ShortTitle(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        if (s.Length <= 6) return s;
+        return s.Substring(0, 5) + "…";
+    }
+
     static Dictionary<string, string[]> BuildCells(Dictionary<string, object> s)
     {
         var d = new Dictionary<string, string[]>();
@@ -729,7 +737,7 @@ static class App
         }
 
         d["dot"] = new[] { "", HexStr(isBusy ? C_OK : C_IDLE) };
-        d["title"] = new[] { Convert.ToString(title) ?? "", HexStr(C_TITLE) };
+        d["title"] = new[] { ShortTitle(Convert.ToString(title) ?? ""), HexStr(C_TITLE) };
         d["clock"] = new[] { "", HexStr(C_ICON) };
         d["turns"] = new[] { (turns == null ? "—" : Convert.ToString(turns)) + "轮 " +
                              (steps == null ? "—" : Convert.ToString(steps)) + "步 ·", HexStr(C_FG) };
