@@ -6,4 +6,5 @@ bar_pid.json
 pos.json
 dcomp/*.exe
 single/*.exe
+/QoderMonitor.exe
 *.tmp

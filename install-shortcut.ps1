@@ -15,6 +15,7 @@ param([switch]$Remove)
 
 $ErrorActionPreference = 'Stop'
 $Root    = Split-Path -Parent $MyInvocation.MyCommand.Path
+$Single  = Join-Path $Root 'QoderMonitor.exe'
 $Vbs     = Join-Path $Root 'toggle-monitor-hidden.vbs'
 $LnkName = 'Qoder 悬浮监控.lnk'
 $desktop = [Environment]::GetFolderPath('Desktop')
@@ -48,9 +49,28 @@ if ($Remove) {
     exit 0
 }
 
+# 优先使用单 exe 版；没有单 exe 时退回旧的 VBS 开关。
+if (Test-Path -LiteralPath $Single) {
+    $lnk = $ws.CreateShortcut($lnkPath)
+    $lnk.TargetPath = $Single
+    $lnk.Arguments = ''
+    $lnk.WorkingDirectory = $Root
+    $lnk.IconLocation = "$Single,0"
+    $lnk.Description = 'Qoder CN 会话监控（单 exe 版）'
+    $lnk.Save()
+    try { [QMInstallShell]::SHChangeNotify(0x00000002, 0x0005, $lnkPath, [IntPtr]::Zero) } catch { }
+
+    $chk = $ws.CreateShortcut($lnkPath)
+    Write-Output "CREATED $lnkPath"
+    Write-Output ("  target = " + $chk.TargetPath)
+    Write-Output ("  workdir= " + $chk.WorkingDirectory)
+    Write-Output ("  icon   = " + $chk.IconLocation)
+    exit 0
+}
+
 if (-not (Test-Path -LiteralPath $Vbs)) {
     Write-Output "MISSING_ENTRY $Vbs"
-    Write-Output '这个文件夹不完整：缺 toggle-monitor-hidden.vbs。'
+    Write-Output '这个文件夹不完整：缺 QoderMonitor.exe 和 toggle-monitor-hidden.vbs。'
     exit 1
 }
 
