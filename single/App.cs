@@ -93,14 +93,90 @@ static class App
     [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
 
     [STAThread]
-    static void Main(string[] args)
+    static int Main(string[] args)
     {
+        try { Console.OutputEncoding = new UTF8Encoding(false); } catch { }
+        if (HasArg(args, "--statusline")) return RunStatuslineCli();
+        if (HasArg(args, "--check")) return RunCheckCli();
+
         AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e)
         {
             Log("UNHANDLED " + e.ExceptionObject);
         };
-        try { MainInner(args); }
-        catch (Exception ex) { Log("FATAL " + ex); }
+        try { MainInner(args); return 0; }
+        catch (Exception ex) { Log("FATAL " + ex); return 1; }
+    }
+
+    static bool HasArg(string[] args, string key)
+    {
+        for (int i = 0; i < args.Length; i++) if (args[i] == key) return true;
+        return false;
+    }
+
+    // statusLine 走 stdout 管道，不创建窗口、不抢互斥体。
+    static int RunStatuslineCli()
+    {
+        string raw = "";
+        try { raw = Console.In.ReadToEnd(); } catch { }
+        Dictionary<string, object> payload = QmJson.ParseObject(raw);
+        if (payload == null) payload = new Dictionary<string, object>();
+        string path = null;
+        object p;
+        if (payload.TryGetValue("transcript_path", out p)) path = QmUtil.Str(p);
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+        {
+            Finding f = SessionFinder.FindActiveTranscript();
+            path = f != null ? f.Path : null;
+        }
+        SessionStats st = null;
+        if (!string.IsNullOrEmpty(path) && File.Exists(path))
+        {
+            st = new SessionStats(path);
+            st.ReadIncrement();
+        }
+        WriteUtf8Line(MetricCalculator.BuildLine(st, payload, false));
+        return 0;
+    }
+
+    // winexe 的 Console.OutputEncoding 对重定向管道不生效，直接写 UTF-8 字节。
+    static void WriteUtf8Line(string text)
+    {
+        try
+        {
+            byte[] b = new UTF8Encoding(false).GetBytes(text + "\n");
+            using (Stream s = Console.OpenStandardOutput())
+            {
+                s.Write(b, 0, b.Length);
+                s.Flush();
+            }
+        }
+        catch { }
+    }
+
+    // 无界面诊断：只打一行关键指标，供命令行重定向检查。
+    static int RunCheckCli()
+    {
+        Finding f = SessionFinder.FindActiveTranscript();
+        if (f == null)
+        {
+            WriteUtf8Line("未找到会话记录");
+            return 1;
+        }
+        SessionStats st = new SessionStats(f.Path);
+        st.ReadIncrement();
+        Metrics m = MetricCalculator.Compute(st, null);
+        WriteUtf8Line("transcript: " + f.Path);
+        WriteUtf8Line("tps=" + (m.Tps.HasValue
+                ? m.Tps.Value.ToString("0.0", CultureInfo.InvariantCulture) + m.TpsKind
+                : "—")
+            + " steps=" + m.Steps
+            + " turns=" + m.Turns
+            + " credits=" + st.Credits.ToString("0.0", CultureInfo.InvariantCulture)
+            + " ctx=" + (m.CtxPct.HasValue ? m.CtxPct.Value.ToString("0.0", CultureInfo.InvariantCulture) + "%" : "—")
+            + " cache=" + (m.CachePct.HasValue ? m.CachePct.Value.ToString("0.0", CultureInfo.InvariantCulture) + "%" : "—")
+            + " total=" + QmUtil.FmtTokens(m.TotalTokens)
+            + " model=" + m.Model);
+        return 0;
     }
 
     static void MainInner(string[] args)
