@@ -5,4 +5,5 @@ bar_state.json
 bar_pid.json
 pos.json
 dcomp/*.exe
+single/*.exe
 *.tmp
