@@ -15,10 +15,13 @@ param([switch]$Remove)
 
 $ErrorActionPreference = 'Stop'
 $Root    = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Single  = Join-Path $Root 'QoderMonitor.exe'
+# 优先使用已安装到 LOCALAPPDATA 的单 exe；没有时再找仓库根目录或 single\。
+$Single  = Join-Path (Join-Path $env:LOCALAPPDATA 'QoderMonitor') 'QoderMonitor.exe'
 if (-not (Test-Path -LiteralPath $Single)) {
-    $alt = Join-Path (Join-Path $Root 'single') 'QoderMonitor.exe'
-    if (Test-Path -LiteralPath $alt) { $Single = $alt }
+    $Single = Join-Path $Root 'QoderMonitor.exe'
+    if (-not (Test-Path -LiteralPath $Single)) {
+        $Single = Join-Path (Join-Path $Root 'single') 'QoderMonitor.exe'
+    }
 }
 $Vbs     = Join-Path $Root 'toggle-monitor-hidden.vbs'
 $LnkName = 'Qoder 悬浮监控.lnk'
@@ -58,7 +61,7 @@ if (Test-Path -LiteralPath $Single) {
     $lnk = $ws.CreateShortcut($lnkPath)
     $lnk.TargetPath = $Single
     $lnk.Arguments = ''
-    $lnk.WorkingDirectory = $Root
+    $lnk.WorkingDirectory = Split-Path -Parent $Single
     $lnk.IconLocation = "$Single,0"
     $lnk.Description = 'Qoder CN 会话监控（单 exe 版）'
     $lnk.Save()
