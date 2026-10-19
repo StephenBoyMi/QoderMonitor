@@ -37,6 +37,7 @@
 | `set-lnk-icon.ps1` | 在彩色/灰色两套图标间切换 |
 | `icons\` | `monitor-on`、`monitor-off` 两套 ico/png 与生成脚本 |
 | `docs\` | README 中的两张示例截图 |
+| `single\` | 单 exe 实验版源码（C# 数据层 + 渲染端），见 `single/README.md` |
 | `LICENSE` | MIT 许可证 |
 | `README.md` | 本文档 |
 
@@ -133,6 +134,10 @@ python qoder_monitor.py --check
 ```
 
 正常输出包含 `usage_mode`、`坏行 = 0` 与一行汇总；启动窄条后 `logs\bar_dcomp.log` 应出现 `dpi=...`、`surface ...x...`、`SHOW fg=Qoder CN.exe`。
+
+## 单 exe 实验版
+
+`single\` 下是正在验证的单进程版本：C# 数据层 + DirectComposition 渲染端，不再依赖 Python，也不写 `bar_state.json`。构建、数据 parity 和已知限制见 [single/README.md](single/README.md)。它尚未进入 Release，稳定下载仍是 v1.0.x。
 
 ## 许可证
 
