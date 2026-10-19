@@ -1,20 +1,26 @@
-# C# 数据层（单 exe 方案第一步）
+# C# 单 exe 原型
 
-状态：数据层已从 `qoder_monitor.py` 移植完成，尚未接入渲染端。现有可运行版本仍然使用 Python 采集端 + `bar_dcomp.exe`，本目录是独立实验分支的代码。
+状态：数据层与渲染端已合并，`single/QoderMonitor.exe` 可以独立运行。双击即显示悬浮条，进程内读取 transcript，不再启动 Python，也不读写 `bar_state.json`。这是 `single-exe` 分支的实验版本，仓库主线仍保留 Python + `bar_dcomp.exe` 的稳定版本。
 
 ## 构建
 
-系统自带 .NET Framework 的 `csc.exe` 即可，不需要 Visual Studio：
-
 ```powershell
-powershell -File build.ps1
+powershell -File build-app.ps1   # 单 exe 原型 -> QoderMonitor.exe
+powershell -File build.ps1       # 数据层验证程序 -> qoder_data.exe
 ```
 
-等价命令：
+均为 .NET Framework 4.8 + 系统自带 `csc.exe`，不需要 Visual Studio。
 
-```
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe -nologo -target:exe -out:qoder_data.exe -r:System.Web.Extensions.dll -r:System.Core.dll Data.cs Program.cs
-```
+## 已实现
+
+- `Data.cs`：路径探测、JSONL 增量解析、`SessionStats`、`decode_tps`、`metrics`、标题读取、会话发现
+- `App.cs`：DirectComposition 透明窄条，数据来自进程内 `SessionCache`
+- 单实例：第二次启动会唤醒已有窗口，不会叠出第二条
+- 托盘图标：显示悬浮条、总在最前、只在 Qoder 前台时显示、开机自启、退出
+- 手动启动后有 8 秒强制显示窗口，避免从资源管理器启动时被前台跟随立刻隐去
+- 无活跃会话时只保留托盘图标，不显示空窄条
+
+实测两行窄条约 92 MB 工作集，启动后稳定，不再随运行时间上涨。
 
 ## 验证
 
@@ -22,27 +28,20 @@ C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe -nologo -target:exe -out
 python parity_test.py
 ```
 
-会冻结 8 个 transcript，对同一份数据分别运行 Python 与 C#，逐项比较快照、标题、statusline 和 JSON。当前结果：全部通过。另用全部 64 个静态 transcript 做过快照比对，64/64 通过。
+冻结 8 个 transcript，对同一份数据比较 Python/C# 的快照、标题、statusline 和 JSON；另用全部静态 transcript 做快照比对，当前 63/63 通过。
+
+## 未做
+
+- 桌面快捷方式仍指向旧的 Python 版；是否切换待确认
+- 无会话时的托盘气泡提示
+- 代码签名，首次运行仍可能触发 SmartScreen
+- 发布包与 README 主文档尚未切到单 exe
 
 ## 接口
 
 | 命令 | 作用 |
 | --- | --- |
-| `qoder_data.exe --check` | 打印当前最活跃会话，格式与 Python 版对应 |
-| `qoder_data.exe --json` | 输出前两个活跃会话的 JSON |
-| `qoder_data.exe --snapshot <file.jsonl>` | 单个 transcript 的完整快照，parity 用 |
-| `qoder_data.exe --title <session_id>` | 从 `main.sqlite` 查标题 |
-| `qoder_data.exe --statusline` | 从 stdin 读 Qoder payload，输出一行 |
-| `qoder_data.exe --emit <file.json>` | 常驻采集，供旧渲染端联调 |
-
-## 设计要点
-
-- 标题读取用 Windows 自带的 `winsqlite3.dll`，不引入第三方 SQLite。
-- JSON 用 `System.Web.Extensions`；`tool_use.input` 的字符估算按 Python `json.dumps` 的格式复刻。
-- `SessionStats` 按增量读取 transcript；`Sessions` 用 `SessionCache` 保存已解析实例。
-- 估算 token 时按 Unicode 码点计数，代理对按 1 个字符处理，和 Python 一致。
-- 数据层不依赖 Python、不启动子进程，也不读写 `bar_state.json`。
-
-## 下一步
-
-把渲染端的 `ReadState()` 换成进程内 `SessionCache`，去掉 `--emit` 与 `bar_state.json`，再加入托盘图标、手动启动强制显示和无会话占位。完成后才是真正的单 exe。
+| `QoderMonitor.exe` | 启动单 exe 悬浮条，托盘常驻 |
+| `QoderMonitor.exe --autostart` | 开机自启入口，不强制显示 |
+| `QoderMonitor.exe --always` | 忽略前台跟随，一直显示 |
+| `qoder_data.exe --check/--json/--snapshot/--title/--statusline/--emit` | 数据层验证入口 |

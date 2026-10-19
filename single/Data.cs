@@ -643,33 +643,25 @@ namespace QoderMonitor
             if (size < Offset) ResetState();
             if (size == Offset) return false;
 
-            byte[] data;
+            bool got = false;
             using (FileStream fs = new FileStream(Path, FileMode.Open, FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete))
             {
                 fs.Seek(Offset, SeekOrigin.Begin);
-                using (MemoryStream ms = new MemoryStream())
+                using (StreamReader sr = new StreamReader(fs, Encoding.UTF8, true, 81920, true))
                 {
-                    byte[] buf = new byte[81920];
-                    int n;
-                    while ((n = fs.Read(buf, 0, buf.Length)) > 0)
-                        ms.Write(buf, 0, n);
-                    data = ms.ToArray();
+                    string rawLine;
+                    while ((rawLine = sr.ReadLine()) != null)
+                    {
+                        string line = rawLine.Trim();
+                        if (line.Length == 0) continue;
+                        Dictionary<string, object> o = QmJson.ParseObject(line);
+                        if (o == null) { LinesBad++; continue; }
+                        Feed(o);
+                        got = true;
+                    }
                 }
                 Offset = fs.Position;
-            }
-
-            bool got = false;
-            string text = Encoding.UTF8.GetString(data);
-            string[] lines = text.Split('\n');
-            foreach (string rawLine in lines)
-            {
-                string line = rawLine.Trim();
-                if (line.Length == 0) continue;
-                Dictionary<string, object> o = QmJson.ParseObject(line);
-                if (o == null) { LinesBad++; continue; }
-                Feed(o);
-                got = true;
             }
             return got;
         }

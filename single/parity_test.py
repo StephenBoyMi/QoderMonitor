@@ -26,8 +26,10 @@ PROJECTS = os.path.join(os.path.expanduser("~"), ".qoder-cn", "projects")
 FLOAT_TOL = 2e-3
 
 
-def run_cs(*args, stdin=None):
+def run_cs(*args, stdin=None, extra_env=None):
     env = dict(os.environ, PYTHONIOENCODING="utf-8")
+    if extra_env:
+        env.update(extra_env)
     p = subprocess.run(
         [CS_EXE] + list(args), input=stdin, capture_output=True,
         encoding="utf-8", errors="replace", timeout=120, env=env,
@@ -161,40 +163,49 @@ def main():
             else:
                 print("PASS statusline")
 
-        # JSON 行（允许 ts 不同，比较同 session 的字段）
-        env = dict(os.environ, PYTHONIOENCODING="utf-8")
-        p = subprocess.run([sys.executable, os.path.join(ROOT, "qoder_monitor.py"), "--json"],
-                           capture_output=True, encoding="utf-8", errors="replace",
-                           timeout=120, env=env)
-        rc, out, err = run_cs("--json")
-        try:
-            pyj = json.loads(p.stdout)
-            csj = json.loads(out)
-            pys = {s["session_id"]: s for s in pyj.get("sessions", [])}
-            css = {s["session_id"]: s for s in csj.get("sessions", [])}
-            if set(pys) != set(css):
-                print("FAIL json sessions:", set(pys), set(css))
-                ok = False
-            else:
-                bad = False
-                for sid in pys:
-                    for k, v in pys[sid].items():
-                        if k == "ts":
-                            continue
-                        if isinstance(v, (int, float)) and not isinstance(v, bool):
-                            if not approx(v, css[sid].get(k)):
-                                print(f"FAIL json {sid} {k}: {v!r} vs {css[sid].get(k)!r}")
-                                bad = True
-                        elif v != css[sid].get(k):
-                            print(f"FAIL json {sid} {k}: {v!r} vs {css[sid].get(k)!r}")
-                            bad = True
-                if bad:
+        # JSON 行：用冻结的临时 home，确保两边看到同一组会话
+        if files:
+            json_home = os.path.join(tmp, "json_home")
+            json_proj = os.path.join(json_home, "projects", "demo")
+            os.makedirs(json_proj, exist_ok=True)
+            json_file = os.path.join(json_proj, "parity.jsonl")
+            shutil.copy2(files[0][1], json_file)
+            os.utime(json_file, None)
+            env = dict(os.environ, PYTHONIOENCODING="utf-8",
+                       QODER_MONITOR_HOME=json_home)
+            p = subprocess.run([sys.executable, os.path.join(ROOT, "qoder_monitor.py"), "--json"],
+                               capture_output=True, encoding="utf-8", errors="replace",
+                               timeout=120, env=env)
+            rc, out, err = run_cs("--json", extra_env={"QODER_MONITOR_HOME": json_home})
+            try:
+                pyj = json.loads(p.stdout)
+                csj = json.loads(out)
+                pys = {s["session_id"]: s for s in pyj.get("sessions", [])}
+                css = {s["session_id"]: s for s in csj.get("sessions", [])}
+                if pyj.get("extra") != csj.get("extra"):
+                    print("FAIL json extra:", pyj.get("extra"), csj.get("extra"))
+                    ok = False
+                elif set(pys) != set(css):
+                    print("FAIL json sessions:", set(pys), set(css))
                     ok = False
                 else:
-                    print("PASS json")
-        except Exception as e:
-            print("FAIL json:", e, out[:200])
-            ok = False
+                    bad = False
+                    for sid in pys:
+                        for k, v in pys[sid].items():
+                            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                                if not approx(v, css[sid].get(k)):
+                                    print(f"FAIL json {sid} {k}: {v!r} vs {css[sid].get(k)!r}")
+                                    bad = True
+                            elif v != css[sid].get(k):
+                                print(f"FAIL json {sid} {k}: {v!r} vs {css[sid].get(k)!r}")
+                                bad = True
+                    if bad:
+                        ok = False
+                    else:
+                        print("PASS json")
+            except Exception as e:
+                print("FAIL json:", e, out[:200])
+                ok = False
 
         print("RESULT", "PASS" if ok else "FAIL")
         return 0 if ok else 1
