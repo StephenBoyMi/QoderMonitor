@@ -385,7 +385,13 @@ namespace QoderMonitor
         public double Tok;
         public double Dur;
         public bool Real;
-        public Sample(double tok, double dur, bool real) { Tok = tok; Dur = dur; Real = real; }
+        // End/Model 是"活跃窗 + 同模型"两条过滤的依据：换模型后旧请求不该再进回归池。
+        public double End;
+        public string Model;
+        public Sample(double tok, double dur, bool real, double end, string model)
+        {
+            Tok = tok; Dur = dur; Real = real; End = end; Model = model;
+        }
     }
 
     public class DecodeResult
@@ -417,7 +423,12 @@ namespace QoderMonitor
             public double CjkEst;
             public Dictionary<string, object> Usage;
             public string ReqId;
+            public string Model;
         }
+
+        // 活跃窗长度与回归最少样本数：窗内只保留当前模型的样本。
+        public const double ActiveWindowS = 600.0;
+        public const int DecodeMinSamples = 8;
 
         public readonly string Path;
         public long Offset;
@@ -526,7 +537,7 @@ namespace QoderMonitor
             {
                 LastReqS = dur;
                 LastReqTps = tok / dur.Value;
-                Samples.Add(new Sample(tok, dur.Value, real));
+                Samples.Add(new Sample(tok, dur.Value, real, g.End.Value, g.Model));
             }
 
             toolStart = g.End.HasValue ? g.End : nextTs;
@@ -597,6 +608,8 @@ namespace QoderMonitor
                 if (u != null) cur.Usage = u;
                 string id = GetStr(m, "id");
                 if (!string.IsNullOrEmpty(id)) cur.ReqId = id;
+                string mm = GetStr(m, "model");
+                if (!string.IsNullOrEmpty(mm)) cur.Model = mm;
                 if (ts.HasValue) lastTs = ts;
                 return;
             }
@@ -682,19 +695,63 @@ namespace QoderMonitor
             return info;
         }
 
-        public DecodeResult DecodeTps()
+        /// <summary>
+        /// 活跃窗样本：以最后一条样本的结束时刻为锚点往前 ActiveWindowS 秒，再只保留与
+        /// 窗内最后一个模型名相同的样本。锚点用样本时刻而不是墙钟，会话空闲时数字停在
+        /// 最后一次活跃期的值上；同模型不足也照样只用同模型，宁可退回 (e2e) 或 —，
+        /// 也不让切换前的模型稀释回归。
+        /// </summary>
+        public List<Sample> CurrentWindow()
         {
             List<Sample> pts = new List<Sample>();
             foreach (Sample s in Samples)
-                if (s.Tok >= 20 && s.Dur >= 0.3 && s.Dur <= 600) pts.Add(s);
+                if (s.Tok >= 20 && s.Dur >= 0.3 && s.Dur <= 600.0) pts.Add(s);
+            if (pts.Count == 0) return pts;
+            double anchor = double.MinValue;
+            foreach (Sample s in pts) if (s.End > anchor) anchor = s.End;
+            List<Sample> win = new List<Sample>();
+            foreach (Sample s in pts) if (s.End >= anchor - ActiveWindowS) win.Add(s);
+
+            string cur = null;
+            for (int i = win.Count - 1; i >= 0 && cur == null; i--)
+                if (!string.IsNullOrEmpty(win[i].Model)) cur = win[i].Model;
+            if (cur == null) return win;
+            List<Sample> same = new List<Sample>();
+            foreach (Sample s in win) if (s.Model == cur) same.Add(s);
+            return same.Count > 0 ? same : win;
+        }
+
+        /// <summary>窗内端到端速率（Σtokens/Σtime，含排队与首字），供回归不成立时回退。</summary>
+        public bool WindowE2E(out double tps, out bool measured)
+        {
+            List<Sample> win = CurrentWindow();
+            double tok = 0, dur = 0;
+            foreach (Sample s in win) if (s.Real) { tok += s.Tok; dur += s.Dur; }
+            if (tok <= 0 || dur <= 0)
+            {
+                tok = 0; dur = 0;
+                foreach (Sample s in win) if (!s.Real) { tok += s.Tok; dur += s.Dur; }
+            }
+            tps = dur > 0 ? tok / dur : 0;
+            measured = tok > 0 && dur > 0 && ContainsReal(win);
+            return tps > 0;
+        }
+
+        static bool ContainsReal(List<Sample> win)
+        {
+            foreach (Sample s in win) if (s.Real) return true;
+            return false;
+        }
+
+        public DecodeResult DecodeTps()
+        {
+            List<Sample> win = CurrentWindow();
             List<Sample> real = new List<Sample>();
-            foreach (Sample s in pts) if (s.Real) real.Add(s);
-            List<Sample> use;
-            bool allMeasured;
-            if (real.Count >= 8) { use = real; allMeasured = true; }
-            else { use = pts; allMeasured = false; }
+            foreach (Sample s in win) if (s.Real) real.Add(s);
+            List<Sample> use = real.Count >= DecodeMinSamples ? real : win;
+            bool allMeasured = real.Count >= DecodeMinSamples;
             int n = use.Count;
-            if (n < 8) return new DecodeResult(false, 0, n, false);
+            if (n < DecodeMinSamples) return new DecodeResult(false, 0, n, false);
             double mx = 0, my = 0;
             foreach (Sample s in use) { mx += s.Tok; my += s.Dur; }
             mx /= n; my /= n;
@@ -804,8 +861,14 @@ namespace QoderMonitor
                 }
                 else
                 {
-                    if (st.MeasDur > 0) { m.Tps = st.MeasTok / st.MeasDur; m.TpsMeasured = true; }
-                    else if (st.EstDur > 0) m.Tps = st.EstTok / st.EstDur;
+                    // 端到端回退也只在活跃窗+同模型的样本集上算，避免整场累计把旧模型的样本带进来。
+                    double e2e;
+                    bool meas;
+                    if (st.WindowE2E(out e2e, out meas))
+                    {
+                        m.Tps = e2e;
+                        m.TpsMeasured = meas;
+                    }
                     m.TpsKind = "(e2e)";
                 }
 

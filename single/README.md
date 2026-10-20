@@ -26,10 +26,14 @@ powershell -File build.ps1       # 数据层验证程序 -> qoder_data.exe
 ## 验证
 
 ```powershell
-python parity_test.py
+python parity_test.py                     # 冻结 8 个 transcript，逐项比较 Python/C#
+python ..\tests\test_switch_window.py     # 换模型场景：证明旧模型样本不再稀释 tok/s
+python ..\tests\sweep_static_parity.py    # 全部静态 transcript 的快照比对（当前 65/65）
 ```
 
-冻结 8 个 transcript，对同一份数据比较 Python/C# 的快照、标题、statusline 和 JSON；另用全部静态 transcript 做快照比对，当前 63/63 通过。
+`parity_test.py` 冻结 8 个 transcript，对同一份数据比较 Python/C# 的快照、标题、statusline 和 JSON。
+
+tok/s 的口径是「活跃窗 + 同模型」：以最后一条请求的结束时刻为锚点向前 10 分钟，再只保留与当前模型同名的样本；回归不成立时在同一集合上退回端到端并标 `(e2e)`。`tests/test_switch_window.py` 每次运行会生成 `tests/switch_dilution.jsonl`（10 条快样本 + 2 条慢样本落在同一个窗内），旧版判据下该文件报 144 tok/s、新版报 12 tok/s。
 
 ## 未做
 

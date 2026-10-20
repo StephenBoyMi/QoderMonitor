@@ -268,8 +268,12 @@ class SessionStats:
         self.meas_dur = 0.0
         self.est_tok = 0.0
         self.est_dur = 0.0
-        # 逐请求的 (输出token, 时长, 是否真值)，用于回归算边际解码速率
+        # 逐请求的 (输出token, 时长, 是否真值, 结束时刻, 模型名)，用于回归算边际解码速率。
+        # 结束时刻与模型名是"活跃窗 + 同模型"两条过滤的依据：换模型后旧请求不该再进池。
         self.samples = []
+        # 活跃窗长度与回归最少样本数，与 C# 版 Data.cs 的常量同值
+        self.ACTIVE_WINDOW_S = 600.0
+        self.DECODE_MIN_SAMPLES = 8
         self.ctx_ratio = None
         self.ctx_window = None
         self.model_key = None
@@ -296,6 +300,7 @@ class SessionStats:
             "cjk_est": 0.0,
             "usage": None,
             "req_id": None,
+            "model": None,
         }
 
     def _close_group(self, next_ts):
@@ -349,7 +354,7 @@ class SessionStats:
         if dur and dur > 0.05 and tok > 0:
             self.last_req_s = dur
             self.last_req_tps = tok / dur
-            self.samples.append((tok, dur, real))
+            self.samples.append((tok, dur, real, end, g["model"]))
 
         # 工具窗口从模型说完这一刻开始
         self._tool_window_start = end if end is not None else next_ts
@@ -408,6 +413,8 @@ class SessionStats:
                 self._cur["usage"] = u
             if m.get("id"):
                 self._cur["req_id"] = m.get("id")
+            if isinstance(m.get("model"), str) and m["model"]:
+                self._cur["model"] = m["model"]
             if ts is not None:
                 self._last_ts = ts
             return
@@ -500,15 +507,18 @@ class SessionStats:
         样本太少或拟合太差时返回 None，让调用方退回端到端口径并如实标注，
         避免把噪声当性能报出去。
         """
-        pts = [(t, d, mm) for t, d, mm in self.samples
-               if t >= 20 and 0.3 <= d <= 600]
+        win = self.current_window()
         # 优先只用真值样本回归。跨重启的会话里早期那些请求的 token 是字符估算，
         # 混进来会让斜率（也就是解码速率）被估算误差污染；真值样本够用时宁可
         # 少用几个点，也不要把口径混成一锅。
-        real = [(t, d) for t, d, mm in pts if mm]
-        use, all_meas = (real, True) if len(real) >= 8 else ([(t, d) for t, d, _ in pts], False)
+        real = [(t, d) for t, d, mm, _e, _mod in win if mm]
+        pts = [(t, d) for t, d, _mm, _e, _mod in win]
+        if len(real) >= self.DECODE_MIN_SAMPLES:
+            use, all_meas = real, True
+        else:
+            use, all_meas = pts, False
         n = len(use)
-        if n < 8:
+        if n < self.DECODE_MIN_SAMPLES:
             return None, n, False
         mx = sum(p[0] for p in use) / n
         my = sum(p[1] for p in use) / n
@@ -525,6 +535,44 @@ class SessionStats:
         if not (1.0 <= dec <= 500.0):
             return None, n, False
         return dec, n, all_meas
+
+    def current_window(self):
+        """活跃窗内的样本列表，每条是 (token, 时长, 是否真值, 结束时刻, 模型名)。
+
+        锚点取窗内最后一条样本的结束时刻，往前 ACTIVE_WINDOW_S 秒。用样本时刻而不是
+        墙钟，是为了让会话空闲时数字停在最后一次活跃期的值上，而不是掉成 —。
+        再只保留"当前模型"（最后一条带模型名的样本）的样本：换模型后旧请求不该
+        继续把斜率定在旧速度上。同模型样本不足时也照样只用同模型——宁可退回
+        (e2e) 或 —，也不把别的模型混进同一个回归。
+        """
+        pts = [(t, d, mm, e, mod) for t, d, mm, e, mod in self.samples
+               if t >= 20 and 0.3 <= d <= 600]
+        if not pts:
+            return pts
+        anchor = max(e for _t, _d, _mm, e, _mod in pts)
+        win = [row for row in pts if row[3] >= anchor - self.ACTIVE_WINDOW_S]
+        cur = None
+        for row in reversed(win):
+            if row[4]:
+                cur = row[4]
+                break
+        if cur is None:
+            return win
+        same = [row for row in win if row[4] == cur]
+        return same if same else win
+
+    def window_e2e(self):
+        """活跃窗（同模型）的端到端速率：Σtokens/Σtime，含排队与首字。"""
+        win = self.current_window()
+        tok = sum(t for t, d, mm, e, mod in win if mm)
+        dur = sum(d for t, d, mm, e, mod in win if mm)
+        if dur > 0 and tok > 0:
+            return tok / dur, True
+        tok = sum(t for t, d, mm, e, mod in win if not mm)
+        dur = sum(d for t, d, mm, e, mod in win if not mm)
+        if dur > 0 and tok > 0:
+            return tok / dur, False
+        return None, False
 
     def snapshot(self):
         """--check 用的完整快照。数值字段直接取 metrics()，保证与窄条、
@@ -669,10 +717,11 @@ def metrics(st, payload=None):
             tps, tps_measured = dec, all_meas
             tps_kind = "" if all_meas else "(估)"
         else:
-            if st.meas_dur > 0:
-                tps, tps_measured = st.meas_tok / st.meas_dur, True
-            elif st.est_dur > 0:
-                tps = st.est_tok / st.est_dur
+            # 端到端回退同样只在活跃窗（同模型）的样本上算，不用整场累计的
+            # meas_tok/meas_dur，否则换模型后数字仍被切换前的样本定住。
+            e2e, meas = st.window_e2e()
+            if e2e is not None:
+                tps, tps_measured = e2e, meas
             tps_kind = "(e2e)"
 
     cache_pct = None

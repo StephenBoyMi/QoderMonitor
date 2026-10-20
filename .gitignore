@@ -8,3 +8,4 @@ dcomp/*.exe
 single/*.exe
 /QoderMonitor.exe
 *.tmp
+tests/switch_dilution.jsonl
