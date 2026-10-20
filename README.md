@@ -140,3 +140,7 @@ powershell -File build-app.ps1
 ## 鸣谢
 
 [TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor) 的作者 [zhongyang219](https://github.com/zhongyang219)：这个项目的轻量悬浮显示与 Windows 窗口处理思路给了本项目重要参考，特此致谢。本项目未直接复用其代码。
+
+DeepSeek Harness（dsh）：它会话统计弹窗的信息组织方式，以及把首字等待从解码速度里剥出来的做法，是本项目 tok/s 口径的最初参照。本项目未复用其代码。
+
+Qoder CN（阿里巴巴）：本项目的输入是它写在本地的 transcript，statusLine 用的也是它提供的命令接口。本项目是个人项目，与官方没有隶属关系。
