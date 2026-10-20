@@ -494,21 +494,22 @@ class SessionStats:
         }
 
     def decode_tps(self):
-        """边际解码速率：请求时长对输出 token 做最小二乘，取斜率的倒数。
+        """边际解码速率：请求时长对输出 token 的稳健斜率，取斜率的倒数。
 
-        斜率是「每多生成一个 token 多花多少秒」，倒数就是解码速率；截距才是排队、
-        网络往返和首字等待这些与输出量无关的固定开销。
+        斜率是「每多生成一个 token 多花多少秒」，倒数就是解码速率。估计方法用
+        Theil–Sen：所有样本两两算斜率取中位数。单个离群请求（长思考、排队、
+        服务端抖动）拉不动中位数，而最小二乘会被它整条拽偏——实测一条 22 个样本
+        的会话，118.7s/3052token 那条把最小二乘从 104 拽到 31，中位数斜率不受影响。
 
         与 dsh 的关系要说准：dsh 是逐请求精确扣掉 TTFT（decodeMs 从首个 token 算起，
         Σtokens/ΣdecodeMs）；Qoder 的 transcript 不落 chunk 时间戳，拿不到 firstToken，
-        所以这里只能用回归估计同一个量。目标一致、估计方法不同，数值不会与 dsh 逐位相同。
+        所以这里只能估计同一个量。目标一致、估计方法不同，数值不会与 dsh 逐位相同。
 
-        Qoder 不落 chunk 时间戳，拿不到真实 decode 窗口，回归是唯一可行的估计。
-        样本太少或拟合太差时返回 None，让调用方退回端到端口径并如实标注，
+        样本太少或斜率不为正时返回 None，让调用方退回端到端口径并如实标注，
         避免把噪声当性能报出去。
         """
         win = self.current_window()
-        # 优先只用真值样本回归。跨重启的会话里早期那些请求的 token 是字符估算，
+        # 优先只用真值样本。跨重启的会话里早期那些请求的 token 是字符估算，
         # 混进来会让斜率（也就是解码速率）被估算误差污染；真值样本够用时宁可
         # 少用几个点，也不要把口径混成一锅。
         real = [(t, d) for t, d, mm, _e, _mod in win if mm]
@@ -520,16 +521,20 @@ class SessionStats:
         n = len(use)
         if n < self.DECODE_MIN_SAMPLES:
             return None, n, False
-        mx = sum(p[0] for p in use) / n
-        my = sum(p[1] for p in use) / n
-        sxx = sum((p[0] - mx) ** 2 for p in use)
-        sxy = sum((p[0] - mx) * (p[1] - my) for p in use)
-        syy = sum((p[1] - my) ** 2 for p in use)
-        if sxx <= 0 or sxy <= 0 or syy <= 0:
+        # 样本极多时按固定步长抽样，保证两两配对的规模有界。
+        stride = max(1, (n + 511) // 512)
+        sel = use[::stride]
+        slopes = [(y2 - y1) / (x2 - x1)
+                  for i, (x1, y1) in enumerate(sel)
+                  for x2, y2 in sel[i + 1:] if x2 != x1]
+        if not slopes:
             return None, n, False
-        if sxy / (sxx * syy) ** 0.5 < 0.25:
+        slopes.sort()
+        m = len(slopes)
+        b = slopes[m // 2] if m % 2 else (slopes[m // 2 - 1] + slopes[m // 2]) / 2.0
+        if b <= 0:
             return None, n, False
-        dec = 1.0 / (sxy / sxx)
+        dec = 1.0 / b
         # 斜率接近 0 时 1/slope 会飞到几千 tok/s（dsh 自己的测试就记录过 26333 的假值），
         # 超出 1~500 不采信，退回端到端。
         if not (1.0 <= dec <= 500.0):

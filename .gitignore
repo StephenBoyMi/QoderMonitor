@@ -10,3 +10,4 @@ single/*.exe
 *.tmp
 tests/switch_dilution.jsonl
 tests/tool_time_idle.jsonl
+tests/robust_slope.jsonl

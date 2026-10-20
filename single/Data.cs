@@ -753,19 +753,27 @@ namespace QoderMonitor
             bool allMeasured = real.Count >= DecodeMinSamples;
             int n = use.Count;
             if (n < DecodeMinSamples) return new DecodeResult(false, 0, n, false);
-            double mx = 0, my = 0;
-            foreach (Sample s in use) { mx += s.Tok; my += s.Dur; }
-            mx /= n; my /= n;
-            double sxx = 0, sxy = 0, syy = 0;
-            foreach (Sample s in use)
-            {
-                sxx += (s.Tok - mx) * (s.Tok - mx);
-                sxy += (s.Tok - mx) * (s.Dur - my);
-                syy += (s.Dur - my) * (s.Dur - my);
-            }
-            if (sxx <= 0 || sxy <= 0 || syy <= 0) return new DecodeResult(false, 0, n, false);
-            if (sxy / Math.Sqrt(sxx * syy) < 0.25) return new DecodeResult(false, 0, n, false);
-            double dec = 1.0 / (sxy / sxx);
+            // Theil–Sen 稳健斜率：所有样本两两算斜率，取中位数。单个离群请求（长思考、
+            // 排队、服务端抖动）拉不动中位数，而最小二乘会被它整条拽偏。
+            // 样本极多时按固定步长抽样，保证两两配对的规模有界。
+            int stride = n > 512 ? (n + 511) / 512 : 1;
+            List<Sample> sel = new List<Sample>();
+            for (int i = 0; i < n; i += stride) sel.Add(use[i]);
+            int m = sel.Count;
+            List<double> slopes = new List<double>(m * (m - 1) / 2);
+            for (int i = 0; i < m; i++)
+                for (int j = i + 1; j < m; j++)
+                {
+                    double dx = sel[j].Tok - sel[i].Tok;
+                    if (dx != 0.0) slopes.Add((sel[j].Dur - sel[i].Dur) / dx);
+                }
+            if (slopes.Count == 0) return new DecodeResult(false, 0, n, false);
+            slopes.Sort();
+            double b = (slopes.Count % 2 == 1)
+                ? slopes[slopes.Count / 2]
+                : (slopes[slopes.Count / 2 - 1] + slopes[slopes.Count / 2]) / 2.0;
+            if (b <= 0) return new DecodeResult(false, 0, n, false);
+            double dec = 1.0 / b;
             if (dec < 1.0 || dec > 500.0) return new DecodeResult(false, 0, n, false);
             return new DecodeResult(true, dec, n, allMeasured);
         }
