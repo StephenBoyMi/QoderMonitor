@@ -544,12 +544,13 @@ namespace QoderMonitor
             toolEnd = null;
         }
 
-        void FlushTool(double? boundaryTs)
+        // 只结算真正出现过 tool_result 的窗口。模型说完话、人隔几小时才开口的那段
+        // 既不是工具时间也不是模型时间，不能因为窗口还开着就把边界当终点计进去。
+        void FlushTool()
         {
             if (!toolStart.HasValue) return;
-            double? end = toolEnd.HasValue ? toolEnd : boundaryTs;
-            if (end.HasValue && end.Value >= toolStart.Value)
-                ToolS += end.Value - toolStart.Value;
+            if (toolEnd.HasValue && toolEnd.Value >= toolStart.Value)
+                ToolS += toolEnd.Value - toolStart.Value;
             toolStart = null;
             toolEnd = null;
         }
@@ -578,7 +579,7 @@ namespace QoderMonitor
                 if (m == null) m = new Dictionary<string, object>();
                 if (cur == null)
                 {
-                    FlushTool(ts);
+                    FlushTool();
                     OpenGroup(ts);
                 }
                 if (ts.HasValue) cur.End = ts;
@@ -639,7 +640,7 @@ namespace QoderMonitor
                 else if (!string.IsNullOrEmpty(pid))
                 {
                     TurnIds.Add(pid);
-                    FlushTool(ts);
+                    FlushTool();
                 }
                 object mk;
                 if (o.TryGetValue("model", out mk) && mk is string) ModelKey = (string)mk;

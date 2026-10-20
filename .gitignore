@@ -9,3 +9,4 @@ single/*.exe
 /QoderMonitor.exe
 *.tmp
 tests/switch_dilution.jsonl
+tests/tool_time_idle.jsonl

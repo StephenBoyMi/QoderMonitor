@@ -360,18 +360,18 @@ class SessionStats:
         self._tool_window_start = end if end is not None else next_ts
         self._tool_window_end = None
 
-    def _flush_tool_window(self, boundary_ts):
+    def _flush_tool_window(self):
         """结算一段工具用时。
 
         语义：从上一条模型响应结束，到最后一条 tool_result 写回之间的墙钟时间。
         并行工具调用会合并进同一段，因此它是"工具占用时间"而非"工具内部耗时"。
-        人工输入的时间不算进来。
+        只有真的出现过 tool_result 的窗口才结算：模型说完话、人隔几小时才开口的
+        那段空闲既不是工具时间也不是模型时间，不能拿边界当终点计进去。
         """
         if self._tool_window_start is None:
             return
-        end = self._tool_window_end if self._tool_window_end is not None else boundary_ts
-        if end is not None and end >= self._tool_window_start:
-            self.tool_s += end - self._tool_window_start
+        if self._tool_window_end is not None and self._tool_window_end >= self._tool_window_start:
+            self.tool_s += self._tool_window_end - self._tool_window_start
         self._tool_window_start = None
         self._tool_window_end = None
 
@@ -392,7 +392,7 @@ class SessionStats:
         if typ == "assistant":
             m = o.get("message") or {}
             if self._cur is None:
-                self._flush_tool_window(ts)
+                self._flush_tool_window()
                 self._open_group(ts)
             if ts is not None:
                 self._cur["end"] = ts
@@ -435,7 +435,7 @@ class SessionStats:
             elif pid:
                 # 真人提交的一轮，人的思考时间不计入任何用时
                 self.turn_ids.add(pid)
-                self._flush_tool_window(ts)
+                self._flush_tool_window()
             if o.get("model") and isinstance(o["model"], str):
                 self.model_key = o["model"]
 

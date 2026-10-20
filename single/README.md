@@ -28,6 +28,7 @@ powershell -File build.ps1       # 数据层验证程序 -> qoder_data.exe
 ```powershell
 python parity_test.py                     # 冻结 8 个 transcript，逐项比较 Python/C#
 python ..\tests\test_switch_window.py     # 换模型场景：证明旧模型样本不再稀释 tok/s
+python ..\tests\test_tool_time.py          # 工具用时：等人 3 小时不计入工具/模型用时
 python ..\tests\sweep_static_parity.py    # 全部静态 transcript 的快照比对（当前 65/65）
 ```
 
